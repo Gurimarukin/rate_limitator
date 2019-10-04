@@ -3,8 +3,8 @@ defmodule RateLimitator.MixProject do
 
   def project do
     [
-      app: :rate_limiter,
-      version: "0.1.0",
+      app: :rate_limitator,
+      version: "1.0.0",
       elixir: "~> 1.9",
       start_permanent: Mix.env() == :prod,
       deps: deps()
