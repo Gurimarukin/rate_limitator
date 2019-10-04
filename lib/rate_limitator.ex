@@ -7,7 +7,7 @@ defmodule RateLimitator do
   ## Example
 
       iex> 1..5
-      ...> |> Enum.map(&RateLimitator.with_limit(:my_limiter, fn -> &1 end, max_demand: 3, interval: 500))
+      ...> |> Enum.map(&RateLimitator.with_limit(:my_limiter, fn -> IO.inspect(&1) end, max_demand: 3, interval: 1000))
       ...> |> Enum.map(&Task.await/1)
       [1, 2, 3, 4, 5]
       iex> RateLimitator.stop(:my_limiter)
@@ -27,12 +27,14 @@ defmodule RateLimitator do
   Tries to start a supervised `Limiter` with name `name`.
   Uses the created `Limiter` or the existing one if it already exists, to submit the job to it.
 
+  Calling `with_limit/3` with one or more `scheduler_args` overwrites **all** the current `args` of the `Scheduler` (using the defaults for the one not provided).
+
   An async `Task` is returned, which must be awaited to get the result of the job.
 
   ## Options
 
-    * `:max_demand` - (number) the max calls which can be done in `interval`
-    * `:interval` - (number) in milliseconds
+    * `:max_demand` - (number) the max calls which can be done in `interval`, default: 5
+    * `:interval` - (number) in milliseconds, default: 1000
   """
   @spec with_limit(atom, (none -> any), [{:max_demand, number} | {:interval, number}]) :: Task.t()
   def with_limit(name, job, scheduler_args \\ []) do
@@ -44,12 +46,12 @@ defmodule RateLimitator do
            @limiters_supervisor,
            {Limiter, {scheduler_args, [name: full_name(name)]}}
          ) do
-      {:ok, pid} ->
-        pid
+      {:ok, limiter} ->
+        limiter
 
-      {:error, {:already_started, pid}} ->
-        if scheduler_args != [], do: nil
-        pid
+      {:error, {:already_started, limiter}} ->
+        if scheduler_args != [], do: Limiter.update_scheduler_args(limiter, scheduler_args)
+        limiter
     end
   end
 

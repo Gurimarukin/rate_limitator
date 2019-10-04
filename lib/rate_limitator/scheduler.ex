@@ -8,12 +8,20 @@ defmodule RateLimitator.Scheduler do
 
   @impl true
   def init({queue_name, args}) do
-    args = %{
+    args = args_or_default(args)
+
+    {:consumer, {args, %{}}, subscribe_to: [queue_name]}
+  end
+
+  defp args_or_default(args) do
+    %{
       max_demand: args[:max_demand] || 5,
       interval: args[:interval] || 1000
     }
+  end
 
-    {:consumer, {args, %{}}, subscribe_to: [queue_name]}
+  def update_args(scheduler, args) do
+    GenStage.call(scheduler, {:update_args, args})
   end
 
   @impl true
@@ -51,5 +59,12 @@ defmodule RateLimitator.Scheduler do
     GenStage.ask(producer.producer, producer.pending)
     Process.send_after(self(), :ask, args.interval)
     {args, producer}
+  end
+
+  @impl true
+  def handle_call({:update_args, args}, _from, {_, state}) do
+    args = args_or_default(args)
+
+    {:reply, :ok, [], {args, state}}
   end
 end

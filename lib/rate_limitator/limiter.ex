@@ -29,21 +29,21 @@ defmodule RateLimitator.Limiter do
   @doc """
   Starts a `Supervisor` for a registered `RateLimitator.Queue` and a `RateLimitator.Scheduler`, so that the scheduler can subscribe to the queue.
   """
-  @spec init([{:max_demand, number} | {:interval, number}]) ::
-          {:ok, {:via, Registry, {Registry.Queues, String.t()}}}
+  @spec init([{:max_demand, number} | {:interval, number}]) :: {:ok, {term, term}}
   @impl true
   def init(scheduler_args) do
     id = UUID.uuid1(:hex)
     queue_name = {:via, Registry, {Registry.Queues, id}}
+    scheduler_name = {:via, Registry, {Registry.Schedulers, id}}
 
     children = [
       {Queue, [name: queue_name]},
-      {Scheduler, {queue_name, scheduler_args, []}}
+      {Scheduler, {queue_name, scheduler_args, [name: scheduler_name]}}
     ]
 
     Supervisor.start_link(children, strategy: :rest_for_one)
 
-    {:ok, queue_name}
+    {:ok, {queue_name, scheduler_name}}
   end
 
   @doc """
@@ -68,9 +68,19 @@ defmodule RateLimitator.Limiter do
     end
   end
 
+  def update_scheduler_args(limiter, scheduler_args) do
+    GenServer.call(limiter, {:update_scheduler_args, scheduler_args})
+  end
+
   @impl true
-  def handle_call({:submit, job}, _from, name) do
-    Queue.in(name, job)
-    {:reply, :ok, name}
+  def handle_call({:submit, job}, _from, {queue_name, scheduler_name}) do
+    Queue.in(queue_name, job)
+    {:reply, :ok, {queue_name, scheduler_name}}
+  end
+
+  @impl true
+  def handle_call({:update_scheduler_args, scheduler_args}, _from, {queue_name, scheduler_name}) do
+    Scheduler.update_args(scheduler_name, scheduler_args)
+    {:reply, :ok, {queue_name, scheduler_name}}
   end
 end
