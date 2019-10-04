@@ -2,18 +2,18 @@ defmodule RateLimitator.Scheduler do
   use GenStage
 
   @spec start_link({atom, [{:max_demand, number} | {:interval, number}], []}) :: any
-  def start_link({name, args, opts}) do
-    GenStage.start_link(__MODULE__, {name, args}, opts)
+  def start_link({queue_name, args, opts}) do
+    GenStage.start_link(__MODULE__, {queue_name, args}, opts)
   end
 
   @impl true
-  def init({name, args}) do
+  def init({queue_name, args}) do
     args = %{
       max_demand: args[:max_demand] || 5,
       interval: args[:interval] || 1000
     }
 
-    {:consumer, {args, %{}}, subscribe_to: [name]}
+    {:consumer, {args, %{}}, subscribe_to: [queue_name]}
   end
 
   @impl true

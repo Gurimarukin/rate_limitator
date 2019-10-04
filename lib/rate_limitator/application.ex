@@ -5,6 +5,7 @@ defmodule RateLimitator.Application do
 
   def start(_type, _args) do
     children = [
+      {Registry, keys: :unique, name: Registry.Queues},
       {DynamicSupervisor, name: RateLimitator.LimitersSupervisor, strategy: :one_for_one}
     ]
 

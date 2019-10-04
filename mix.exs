@@ -20,7 +20,8 @@ defmodule RateLimitator.MixProject do
 
   defp deps do
     [
-      {:gen_stage, "~> 0.14"}
+      {:gen_stage, "~> 0.14"},
+      {:uuid, "~> 1.1"}
     ]
   end
 end

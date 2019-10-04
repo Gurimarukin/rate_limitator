@@ -1,30 +1,71 @@
 defmodule RateLimitator.Limiter do
+  @moduledoc """
+  ## Example
+
+      iex> {:ok, pid} = Limiter.start_link({[max_demand: 3, interval: 2000], []})
+      iex> 1..5
+      ...> |> Enum.map(&Limiter.submit(pid, fn -> &1 end))
+      ...> |> Enum.map(&Task.await/1)
+      [1, 2, 3, 4, 5]
+  """
+
   use GenServer
 
   alias RateLimitator.{Scheduler, Queue}
 
-  @spec start_link({atom, [{:max_demand, number} | {:interval, number}], [{:name, atom}]}) ::
-          {:ok, pid}
-  def start_link({name, scheduler_args, opts}) do
-    GenServer.start_link(__MODULE__, {name, scheduler_args}, opts)
+  @doc """
+  Starts the Limiter.
+
+  ## Arguments
+
+    * `scheduler_args` arguments passed down to `RateLimitator.Scheduler`
+    * `opts` - options for `GenServer.start_link/3`
+  """
+  @spec start_link({[{:max_demand, number} | {:interval, number}], [{:name, atom}]}) :: {:ok, pid}
+  def start_link({scheduler_args, opts}) do
+    GenServer.start_link(__MODULE__, scheduler_args, opts)
   end
 
+  @doc """
+  Starts a `Supervisor` for a registered `RateLimitator.Queue` and a `RateLimitator.Scheduler`, so that the scheduler can subscribe to the queue.
+  """
+  @spec init([{:max_demand, number} | {:interval, number}]) ::
+          {:ok, {:via, Registry, {Registry.Queues, String.t()}}}
   @impl true
-  def init({name, scheduler_args}) do
-    full_name = Module.concat(Queue, name)
+  def init(scheduler_args) do
+    id = UUID.uuid1(:hex)
+    queue_name = {:via, Registry, {Registry.Queues, id}}
 
     children = [
-      Supervisor.child_spec({Queue, [name: full_name]}, id: {Queue, name}),
-      Supervisor.child_spec({Scheduler, {full_name, scheduler_args, []}}, id: {Scheduler, name})
+      {Queue, [name: queue_name]},
+      {Scheduler, {queue_name, scheduler_args, []}}
     ]
 
     Supervisor.start_link(children, strategy: :rest_for_one)
 
-    {:ok, full_name}
+    {:ok, queue_name}
   end
 
+  @doc """
+  Submits job to the limiter.
+
+  Returns a async `Task` which must be awaited to get the result.
+  """
+  @spec submit(atom | pid | {atom, any} | {:via, atom, any}, any) :: any
   def submit(limiter, job) do
-    GenServer.call(limiter, {:submit, job})
+    Task.async(fn ->
+      GenServer.call(limiter, {:submit, get_job(job, self())})
+
+      receive do
+        {:result, result} -> result
+      end
+    end)
+  end
+
+  defp get_job(job, parent) do
+    fn ->
+      Task.start_link(fn -> send(parent, {:result, job.()}) end)
+    end
   end
 
   @impl true
